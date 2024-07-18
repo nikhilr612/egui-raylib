@@ -16,5 +16,7 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+    - name: Install libxrandr
+      run: sudo apt-get install libxrandr libxrandr-dev
     - name: Build
       run: cargo build --verbose
