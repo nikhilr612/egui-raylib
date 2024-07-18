@@ -2,6 +2,11 @@
 name = "egui-raylib"
 version = "0.1.0"
 edition = "2021"
+license-file = "LICENSE"
+description = "Raylib integration for egui"
+repository = "https://github.com/nikhilr612/egui-raylib"
+readme = "README.md"
+keywords = ["gamedev", "graphics", "gui", "raylib", "egui", "immediate-mode"]
 
 [dependencies]
 egui = "0.28.1"
