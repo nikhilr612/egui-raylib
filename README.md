@@ -2,7 +2,7 @@
 [Raylib](https://github.com/raysan5/raylib) integration for [egui](https://github.com/emilk/egui).
 The primary use case for this crate is a drop-in GUI library for 2D games made in Raylib.
 
-# Example Usage
+## Example Usage
 1. Add this crate as a dependency.
 2. Get coding!
 ```rust
@@ -42,10 +42,13 @@ fn main() {
 	}
 }
 ```
+## Screenshot
+
+The screenshot of another example.
 
 ![Screenshot of an example program](screenshot.png)
 
-# Dependencies
+## Dependencies
 1. [raylib-rs](https://github.com/raylib-rs/raylib-rs): Rust-bindings for Raylib.
 2. egui
 
