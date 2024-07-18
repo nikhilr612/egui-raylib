@@ -31,6 +31,7 @@ impl Default for InputOptions {
         key_map.insert(KeyboardKey::KEY_DOWN, Key::ArrowDown);
         key_map.insert(KeyboardKey::KEY_LEFT, Key::ArrowLeft);
         key_map.insert(KeyboardKey::KEY_RIGHT, Key::ArrowRight);
+        key_map.insert(KeyboardKey::KEY_TAB, Key::Tab);
         Self {
             native_pixels_per_point: 1.0,
             max_texture_size: None,
@@ -48,7 +49,8 @@ fn conv_rect(r: rayRect) -> egRect {
 }
 
 /// Using the provided input options, gather all required input for egui.
-pub fn gather_input(opt: &InputOptions, ctx: &egui::Context, rl: &mut RaylibHandle) -> RawInput {
+/// `last_key` is simply an option to track the key pressed in previous frame, so that it's release event may be pushed.. 
+pub fn gather_input(opt: &InputOptions, last_key: &mut HashSet<, ctx: &egui::Context, rl: &mut RaylibHandle) -> RawInput {
     let monitor_id = raylib::window::get_current_monitor();
     let (mw, mh) = (
         raylib::window::get_monitor_width(monitor_id),
@@ -118,18 +120,29 @@ pub fn gather_input(opt: &InputOptions, ctx: &egui::Context, rl: &mut RaylibHand
         })
         .collect();
 
+    if let Some(key) = last_key.take() {
+        events.push(Event::Key {
+            key,
+            physical_key: None,
+            pressed: false,
+            repeat: false,
+            modifiers,
+        });
+    }
+
     if let Some(key) = rl.get_char_pressed().and_then(|ch| {
         let mut s = String::new();
         s.push(ch);
         Key::from_name(&s)
     }) {
+        last_key.replace(key);
         events.push(Event::Key {
             key,
             physical_key: None,
             pressed: true,
             repeat: false,
             modifiers,
-        })
+        });
     }
 
     if rl.is_key_pressed(KeyboardKey::KEY_C) && modifiers.ctrl {
@@ -215,7 +228,7 @@ pub fn gather_input(opt: &InputOptions, ctx: &egui::Context, rl: &mut RaylibHand
         Vec::new()
     };
 
-    // if !events.is_empty() { println!("Events: {events:?}"); }
+    if !events.is_empty() { println!("Events: {events:?}"); }
 
     RawInput {
         viewport_id: ViewportId::ROOT,
