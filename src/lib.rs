@@ -45,6 +45,7 @@ use raylib::{
 
 pub mod input;
 pub mod paint;
+pub mod util;
 
 #[cfg(test)]
 mod tests;
@@ -65,7 +66,6 @@ pub struct RlEgui {
     inopt: InputOptions,
     prs: Option<paint::PreparedShapes>,
     painter: paint::Painter,
-    last_key: Option<egui::Key>
 }
 
 impl RlEgui {
@@ -76,7 +76,6 @@ impl RlEgui {
             inopt,
             prs: None,
             painter: Painter::default(),
-            last_key: None
         }
     }
 
@@ -100,7 +99,7 @@ impl RlEgui {
         F: FnOnce(&egui::Context),
         H: PlatformHandler,
     {
-        let raw_input = gather_input(&self.inopt, &mut self.last_key, &self.ctx, rl);
+        let raw_input = gather_input(&self.inopt, &self.ctx, rl);
         let output = paint::full_output(rl, raw_input, &self.ctx, run_ui, handler);
         let prepared = self.painter.predraw(output, rl, rthread);
         self.prs.replace(prepared);

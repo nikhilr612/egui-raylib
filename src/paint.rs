@@ -6,7 +6,7 @@ use egui::{
     ahash::HashMap, epaint::ImageDelta, output::OutputEvent, Context, FullOutput, OpenUrl,
     RawInput, TextureId,
 };
-use egui::{Color32, Mesh, Pos2, Vec2};
+use egui::{Mesh, Vec2};
 use raylib::color::Color;
 use raylib::drawing::RaylibScissorModeExt;
 use raylib::ffi::Rectangle;
@@ -16,6 +16,8 @@ use raylib::{drawing::RaylibDraw, ffi::MouseCursor, RaylibHandle};
 
 use raylib::texture::Image as rayImage;
 use raylib::texture::{RaylibTexture2D, Texture2D as rayTexture};
+
+use crate::util::ConvertRE;
 
 /// Trait to handle egui's platform-specific output.
 pub trait PlatformHandler {
@@ -94,30 +96,10 @@ where
     fout
 }
 
-/// Convert raw image (Uncompressed RGBA) of size `size`, stored in `rgba` into raylib [Image](raylib::texture::Image)
-/// # Safety
-/// Unsafe behaviour occurs if image created did not allocate enough pixels for RGBA writing.
-/// However, this function uses Raylib's `gen_image_color` to allocate an image before writing.
-/// Currently, Raylib's `GenImageColor` function will `calloc` for `size[0]*size[1]*4` bytes in RGBA format itself.
-/// Thus, hypothetically this function is always safe.
-#[allow(dead_code)]
-pub fn rl_img_from_rgba(size: [usize; 2], rgba: &[u8]) -> rayImage {
-    let mut img =
-        rayImage::gen_image_color(size[0] as i32, size[1] as i32, Color::BLACK.alpha(0.0));
-    img.set_format(raylib::ffi::PixelFormat::PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
-    let raw = img.to_raw();
-    let len = (raw.width * raw.height * 4) as usize;
-    let rawptr = raw.data as *mut u8;
-    unsafe {
-        std::ptr::copy(rgba.as_ptr(), rawptr, len);
-        rayImage::from_raw(raw)
-    }
-}
-
 /// Create a raylib image from pixels.
-/// Same as [rl_img_from_rgba], except uses slice of pixels instead of an iterator of bytes.
+/// Same as [crate::utils::rl_image_from_rgba], except uses slice of pixels instead of an iterator of bytes.
 /// # Safety
-/// Hypothetically safe, see safety condition for [rimg_from_raw].
+/// Hypothetically safe, see safety condition for `rl_image_from_rgba`.
 fn rimg_from_pixels(size: [usize; 2], pixels: impl Iterator<Item = [u8; 4]>) -> rayImage {
     let mut img =
         rayImage::gen_image_color(size[0] as i32, size[1] as i32, Color::BLACK.alpha(0.0));
@@ -142,23 +124,9 @@ pub(crate) struct Painter {
     fonttex: Option<TextureId>,
 }
 
-fn col32_torcol(c: Color32) -> Color {
-    let u = c.to_srgba_unmultiplied();
-    Color {
-        r: u[0],
-        g: u[1],
-        b: u[2],
-        a: u[3],
-    }
-}
-
-fn pos2_to_rvec(v: &Pos2) -> Vector2 {
-    Vector2 { x: v.x, y: v.y }
-}
-
 fn color_mode_to_color(c: &ColorMode) -> Color {
     match c {
-        ColorMode::Solid(c) => col32_torcol(*c),
+        ColorMode::Solid(c) => c.convert(),
         ColorMode::UV(_) => {
             eprintln!("egui-raylib: UV color mode for paths and lines is not yet implemented! Falling back to WHITE.");
             Color::WHITE
@@ -253,8 +221,8 @@ impl Painter {
 		    	let r1 = (c.radius + c.stroke.width) * pxpp;
 
 		    	// First draw stroke, then draw the real circle concentric to it.
-		    	d.draw_circle(center_x, center_y, r1, col32_torcol(c.stroke.color));
-		    	d.draw_circle(center_x, center_y, r2, col32_torcol(c.fill));
+		    	d.draw_circle(center_x, center_y, r1, c.stroke.color.convert());
+		    	d.draw_circle(center_x, center_y, r2, c.fill.convert());
 		    },
 		    egui::Shape::Ellipse(es) => {
 		    	// Similar to circle.
@@ -264,12 +232,12 @@ impl Painter {
 		    	let axes1 = es.radius + Vec2::new(es.stroke.width, es.stroke.width);
 		    	let axes2 = es.radius;
 
-		    	d.draw_ellipse(center_x, center_y, axes1.x, axes1.y, col32_torcol(es.stroke.color));
-		    	d.draw_ellipse(center_x, center_y, axes2.x, axes2.y, col32_torcol(es.fill));
+		    	d.draw_ellipse(center_x, center_y, axes1.x, axes1.y, es.stroke.color.convert());
+		    	d.draw_ellipse(center_x, center_y, axes2.x, axes2.y, es.fill.convert());
 		    },
 		    egui::Shape::LineSegment { points, stroke } => {
-		    	let start_pos = pos2_to_rvec(&points[0]).scale_by(pxpp);
-		    	let end_pos = pos2_to_rvec(&points[1]).scale_by(pxpp);
+		    	let start_pos = points[0].convert().scale_by(pxpp);
+		    	let end_pos = points[1].convert().scale_by(pxpp);
 		    	let thick = stroke.width * pxpp;
 		    	d.draw_line_ex(start_pos, end_pos, thick, color_mode_to_color(&stroke.color))
 		    },
@@ -278,19 +246,22 @@ impl Painter {
                 if ps.closed {
                     let mut out = Mesh::default();
                     let mut p = Path::default();
-                    let fill = col32_torcol(ps.fill);
+                    let fill = ps.fill.convert();
                     p.add_line_loop(&ps.points);
                     p.fill(0.2, ps.fill, &mut out);
                     for verts in out.indices.chunks_exact(3) {
-                        let p0 = pos2_to_rvec(&out.vertices[verts[0] as usize].pos).scale_by(pxpp);
-                        let p1 = pos2_to_rvec(&out.vertices[verts[1] as usize].pos).scale_by(pxpp);
-                        let p2 = pos2_to_rvec(&out.vertices[verts[2] as usize].pos).scale_by(pxpp);
+                        let p0 = out.vertices[verts[0] as usize].pos.convert().scale_by(pxpp);
+                        let p1 = out.vertices[verts[1] as usize].pos.convert().scale_by(pxpp);
+                        let p2 = out.vertices[verts[2] as usize].pos.convert().scale_by(pxpp);
                         d.draw_triangle(p0, p1, p2, fill);
                     }
                 } else {
                     let lines = ps.points.iter()
                         .zip(ps.points.iter().skip(1))
-                        .map(|(a,b)| (pos2_to_rvec(a).scale_by(pxpp), pos2_to_rvec(b).scale_by(pxpp)));
+                        .map(|(a,b)| 
+                            (a.convert().scale_by(pxpp), 
+                             b.convert().scale_by(pxpp))
+                            );
                     let thick = ps.stroke.width * pxpp;
                     let color = color_mode_to_color(&ps.stroke.color);
 
@@ -315,8 +286,8 @@ impl Painter {
                     width: rrect.width + 2.0 * swidth,
                     height: rrect.height + 2.0 * swidth
                 };
-                let fill_color = col32_torcol(rs.fill);
-                let stroke_color = col32_torcol(rs.stroke.color);
+                let fill_color = rs.fill.convert();
+                let stroke_color = rs.stroke.color.convert();
                 d.draw_rectangle_rec(rrect2, stroke_color);
 
                 if rs.uv == egui::Rect::ZERO {
@@ -346,7 +317,7 @@ impl Painter {
                 for row in ts.galley.rows.iter() {
                     for g in row.glyphs.iter() {
                         let color = ts.override_text_color.unwrap_or_else(|| ts.galley.job.sections[g.section_index as usize].format.color);
-                        let tint = col32_torcol(color);
+                        let tint = color.convert();
                         let dst_rect = Rectangle {
                             x: origin.x + (g.pos.x + g.uv_rect.offset.x) * pxpp,
                             y: origin.y + (g.pos.y + g.uv_rect.offset.y) * pxpp,
@@ -367,22 +338,22 @@ impl Painter {
 		    },
 		    egui::Shape::QuadraticBezier(qbez) => {
 		    	let points: [Vector2; 3] = [
-		    		pos2_to_rvec(&qbez.points[0]).scale_by(pxpp),
-		    		pos2_to_rvec(&qbez.points[1]).scale_by(pxpp),
-		    		pos2_to_rvec(&qbez.points[2]).scale_by(pxpp)
+		    		qbez.points[0].convert().scale_by(pxpp),
+		    		qbez.points[1].convert().scale_by(pxpp),
+		    		qbez.points[2].convert().scale_by(pxpp)
 		    	];
 		    	let thick = qbez.stroke.width * pxpp;
-		    	d.draw_spline_bezier_quadratic(points.as_slice(), thick, col32_torcol(qbez.fill))
+		    	d.draw_spline_bezier_quadratic(points.as_slice(), thick, qbez.fill.convert())
 		    },
 		    egui::Shape::CubicBezier(cbez) => {
 		    	let points: [Vector2; 4] = [
-		    		pos2_to_rvec(&cbez.points[0]).scale_by(pxpp),
-		    		pos2_to_rvec(&cbez.points[1]).scale_by(pxpp),
-		    		pos2_to_rvec(&cbez.points[2]).scale_by(pxpp),
-		    		pos2_to_rvec(&cbez.points[3]).scale_by(pxpp)
+		    		cbez.points[0].convert().scale_by(pxpp),
+		    		cbez.points[1].convert().scale_by(pxpp),
+		    		cbez.points[2].convert().scale_by(pxpp),
+		    		cbez.points[3].convert().scale_by(pxpp)
 		    	];
 		    	let thick = cbez.stroke.width * pxpp;
-		    	d.draw_spline_bezier_cubic(points.as_slice(), thick, col32_torcol(cbez.fill));
+		    	d.draw_spline_bezier_cubic(points.as_slice(), thick, cbez.fill.convert());
 		    },
 		    egui::Shape::Mesh(_) => unimplemented!("Haven't implemented drawing arbitrary meshes as there is no immediately obvious way of doing it using raylib."),
 		    egui::Shape::Callback(_) => unimplemented!("Implement support for PaintCallbacks."),

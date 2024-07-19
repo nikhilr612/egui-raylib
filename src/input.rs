@@ -10,6 +10,8 @@ use raylib::ffi::{KeyboardKey, MouseButton};
 use raylib::prelude::Rectangle as rayRect;
 use raylib::RaylibHandle;
 
+use crate::util::ConvertRE;
+
 /// Struct to store values
 pub struct InputOptions {
     /// 'Point' to _native pixel_ conversion ratio. 'Points' are `egui`'s logical pixels.
@@ -41,121 +43,15 @@ impl Default for InputOptions {
     }
 }
 
-fn conv_rect(r: rayRect) -> egRect {
-    egRect {
-        min: Pos2::new(r.x, r.y),
-        max: Pos2::new(r.x + r.width, r.y + r.height),
-    }
-}
-
-/// Using the provided input options, gather all required input for egui.
-/// `last_key` is simply an option to track the key pressed in previous frame, so that it's release event may be pushed.. 
-pub fn gather_input(opt: &InputOptions, last_key: &mut HashSet<, ctx: &egui::Context, rl: &mut RaylibHandle) -> RawInput {
-    let monitor_id = raylib::window::get_current_monitor();
-    let (mw, mh) = (
-        raylib::window::get_monitor_width(monitor_id),
-        raylib::window::get_monitor_height(monitor_id),
-    );
-    let pixels_per_point = ctx.zoom_factor() * opt.native_pixels_per_point;
-
-    let monitor_size = Vec2::new(mw as f32 / pixels_per_point, mh as f32 / pixels_per_point);
-    let window_size = Some(egRect::from_min_max(
-        Pos2::ZERO,
-        Pos2::new(
-            rl.get_screen_width() as f32 / pixels_per_point,
-            rl.get_screen_height() as f32 / pixels_per_point,
-        ),
-    ));
-
-    let viewport = ViewportInfo {
-        parent: None,
-        title: None,
-        events: Default::default(),
-        native_pixels_per_point: Some(opt.native_pixels_per_point),
-        monitor_size: Some(monitor_size),
-        inner_rect: window_size,
-        outer_rect: window_size,
-        minimized: Some(rl.is_window_minimized()),
-        maximized: None,
-        fullscreen: Some(rl.is_window_fullscreen()),
-        focused: Some(rl.is_window_focused()),
-    };
-
-    let screen_rect = opt.region.map(conv_rect).or(window_size);
-
-    let modifiers = Modifiers {
-        alt: rl.is_key_down(KeyboardKey::KEY_LEFT_ALT)
-            || rl.is_key_down(KeyboardKey::KEY_RIGHT_ALT),
-        ctrl: rl.is_key_down(KeyboardKey::KEY_LEFT_CONTROL)
-            || rl.is_key_down(KeyboardKey::KEY_RIGHT_CONTROL),
-        shift: rl.is_key_down(KeyboardKey::KEY_LEFT_SHIFT)
-            || rl.is_key_down(KeyboardKey::KEY_RIGHT_SHIFT),
-        mac_cmd: false,
-        command: false,
-    };
-
-    let mut events: Vec<_> = opt
-        .key_map
-        .iter()
-        .filter_map(|(&kk, &key)| {
-            if rl.is_key_pressed(kk) {
-                Some(Event::Key {
-                    key,
-                    physical_key: None,
-                    pressed: true,
-                    repeat: false,
-                    modifiers,
-                })
-            } else if rl.is_key_released(kk) {
-                Some(Event::Key {
-                    key,
-                    physical_key: None,
-                    pressed: false,
-                    repeat: false,
-                    modifiers,
-                })
-            } else {
-                None
-            }
-        })
-        .collect();
-
-    if let Some(key) = last_key.take() {
-        events.push(Event::Key {
-            key,
-            physical_key: None,
-            pressed: false,
-            repeat: false,
-            modifiers,
-        });
-    }
-
-    if let Some(key) = rl.get_char_pressed().and_then(|ch| {
-        let mut s = String::new();
-        s.push(ch);
-        Key::from_name(&s)
-    }) {
-        last_key.replace(key);
-        events.push(Event::Key {
-            key,
-            physical_key: None,
-            pressed: true,
-            repeat: false,
-            modifiers,
-        });
-    }
-
-    if rl.is_key_pressed(KeyboardKey::KEY_C) && modifiers.ctrl {
-        events.push(Event::Copy)
-    } else if rl.is_key_pressed(KeyboardKey::KEY_V) && modifiers.ctrl {
-        match rl.get_clipboard_text() {
-			Ok(s) => events.push(Event::Paste(s)),
-			Err(e) => eprintln!("egui-raylib: Expect clipboard to have utf8 text, cannot paste otherwise\n\tdetail: {e}")
-		}
-    }
-
+fn get_mouse_input(
+    rl: &mut RaylibHandle,
+    events: &mut Vec<Event>,
+    pixels_per_point: f32,
+    modifiers: Modifiers,
+) {
     let mouse_delta = rl.get_mouse_delta().scale_by(1.0 / pixels_per_point);
     let mouse_position = rl.get_mouse_position().scale_by(1.0 / pixels_per_point);
+
     if mouse_delta.x > 0.0 || mouse_delta.y > 0.0 {
         events.push(Event::MouseMoved(Vec2::new(mouse_delta.x, mouse_delta.y)));
         events.push(Event::PointerMoved(Pos2::new(
@@ -203,6 +99,117 @@ pub fn gather_input(opt: &InputOptions, last_key: &mut HashSet<, ctx: &egui::Con
             modifiers,
         })
     }
+}
+
+fn get_keyboard_input(
+    opt: &InputOptions,
+    rl: &mut RaylibHandle,
+    events: &mut Vec<Event>,
+    modifiers: Modifiers,
+    ctx: &egui::Context,
+) {
+    events.extend(opt.key_map.iter().filter_map(|(&kk, &key)| {
+        if rl.is_key_pressed(kk) {
+            Some(Event::Key {
+                key,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers,
+            })
+        } else if rl.is_key_released(kk) {
+            Some(Event::Key {
+                key,
+                physical_key: None,
+                pressed: false,
+                repeat: false,
+                modifiers,
+            })
+        } else {
+            None
+        }
+    }));
+
+    // Egui actually wants Text input right now.
+    if ctx.wants_keyboard_input() {
+        let mut buf = String::new();
+        // So give them that. Raylib queues characters anyways.
+        loop {
+            let r = rl.get_char_pressed();
+            if let Some(ch) = r {
+                buf.push(ch);
+            } else {
+                break;
+            }
+        }
+        if !buf.is_empty() {
+            events.push(Event::Text(buf));
+        }
+    }
+}
+
+/// Using the provided input options, gather all required input for egui.
+/// `last_key` is simply an option to track the key pressed in previous frame, so that it's release event may be pushed..
+pub fn gather_input(opt: &InputOptions, ctx: &egui::Context, rl: &mut RaylibHandle) -> RawInput {
+    let monitor_id = raylib::window::get_current_monitor();
+    let (mw, mh) = (
+        raylib::window::get_monitor_width(monitor_id),
+        raylib::window::get_monitor_height(monitor_id),
+    );
+    let pixels_per_point = ctx.zoom_factor() * opt.native_pixels_per_point;
+
+    let monitor_size = Vec2::new(mw as f32 / pixels_per_point, mh as f32 / pixels_per_point);
+    let window_size = Some(egRect::from_min_max(
+        Pos2::ZERO,
+        Pos2::new(
+            rl.get_screen_width() as f32 / pixels_per_point,
+            rl.get_screen_height() as f32 / pixels_per_point,
+        ),
+    ));
+
+    let viewport = ViewportInfo {
+        parent: None,
+        title: None,
+        events: Default::default(),
+        native_pixels_per_point: Some(opt.native_pixels_per_point),
+        monitor_size: Some(monitor_size),
+        inner_rect: window_size,
+        outer_rect: window_size,
+        minimized: Some(rl.is_window_minimized()),
+        maximized: None,
+        fullscreen: Some(rl.is_window_fullscreen()),
+        focused: Some(rl.is_window_focused()),
+    };
+
+    let screen_rect = opt.region.map(|r| r.convert()).or(window_size);
+
+    let modifiers = Modifiers {
+        alt: rl.is_key_down(KeyboardKey::KEY_LEFT_ALT)
+            || rl.is_key_down(KeyboardKey::KEY_RIGHT_ALT),
+        ctrl: rl.is_key_down(KeyboardKey::KEY_LEFT_CONTROL)
+            || rl.is_key_down(KeyboardKey::KEY_RIGHT_CONTROL),
+        shift: rl.is_key_down(KeyboardKey::KEY_LEFT_SHIFT)
+            || rl.is_key_down(KeyboardKey::KEY_RIGHT_SHIFT),
+        mac_cmd: false,
+        command: false,
+    };
+
+    let mut events: Vec<_> = Vec::new();
+
+    get_keyboard_input(opt, rl, &mut events, modifiers, ctx);
+
+    if rl.is_key_pressed(KeyboardKey::KEY_C) && modifiers.ctrl {
+        events.push(Event::Copy)
+    } else if rl.is_key_pressed(KeyboardKey::KEY_V) && modifiers.ctrl {
+        match rl.get_clipboard_text() {
+			Ok(s) => events.push(Event::Paste(s)),
+			Err(e) => eprintln!("egui-raylib: Expect clipboard to have utf8 text, cannot paste otherwise\n\tdetail: {e}")
+		}
+    }
+
+    // if ctx.wants_pointer_input() {
+    get_mouse_input(rl, &mut events, pixels_per_point, modifiers);
+    // }
 
     let dropped_files = if rl.is_file_dropped() {
         rl.load_dropped_files()
@@ -228,7 +235,9 @@ pub fn gather_input(opt: &InputOptions, last_key: &mut HashSet<, ctx: &egui::Con
         Vec::new()
     };
 
-    if !events.is_empty() { println!("Events: {events:?}"); }
+    if !events.is_empty() {
+        println!("Events: {events:?}");
+    }
 
     RawInput {
         viewport_id: ViewportId::ROOT,

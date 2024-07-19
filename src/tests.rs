@@ -1,18 +1,13 @@
 use egui::{Color32, Context, Label, RichText, Visuals};
 use raylib::prelude::{Color, RaylibDraw};
 
-use crate::{
-    input::{gather_input, InputOptions},
-    paint::{full_output, Painter},
-    DummyHandler, RlEgui,
-};
+use crate::{input::InputOptions, RlEgui};
 
-#[derive(PartialEq)]
-#[derive(Debug)]
+#[derive(PartialEq, Debug)]
 enum TestEnum {
     First,
     Second,
-    Third
+    Third,
 }
 
 /// UI to test widgets.
@@ -25,17 +20,16 @@ struct TestUi {
     radio: TestEnum,
     scalar: f32,
     string: String,
-    color: Color32,
-    animate_progress_bar: bool
+    animate_progress_bar: bool,
 }
 
-// Omitted - 
+// Omitted -
 //  1. Image (for now)
 //  2. ColorPicker (requires Meshes)
-//  3. 
+//  3.
 
 fn doc_link_label(a: &str, _b: &str) -> Label {
-    Label::new(RichText::new(a).color(Color32::BLUE))
+    Label::new(RichText::new(a).color(Color32::LIGHT_BLUE))
 }
 
 impl TestUi {
@@ -48,8 +42,7 @@ impl TestUi {
             radio,
             scalar,
             string,
-            color,
-            animate_progress_bar
+            animate_progress_bar,
         } = self;
 
         ui.add(doc_link_label("Label", "label"));
@@ -148,6 +141,15 @@ impl TestUi {
     }
 
     fn ui(&mut self, ui: &mut egui::Ui) {
+        ui.input(|i| {
+            if i.key_pressed(egui::Key::A) {
+                println!("A was pressed!");
+            }
+            if i.key_released(egui::Key::A) {
+                println!("A was released!");
+            }
+        });
+
         ui.add_enabled_ui(self.enabled, |ui| {
             if !self.visible {
                 ui.set_invisible();
@@ -223,9 +225,7 @@ fn it_works() {
         boolean: false,
         scalar: 0.0,
         string: String::new(),
-        color: Color32::WHITE,
         animate_progress_bar: true,
-        
     };
 
     let mut bool_flag = true;
@@ -233,7 +233,7 @@ fn it_works() {
     let mut gui = RlEgui::new(inopt, ctx);
 
     while !rl.window_should_close() {
-        gui.prepare(&mut rl, &thread, |c| test_ui.run(c, &mut bool_flag));        
+        gui.prepare(&mut rl, &thread, |c| test_ui.run(c, &mut bool_flag));
 
         let mut d = rl.begin_drawing(&thread);
         d.clear_background(Color::WHITE);
