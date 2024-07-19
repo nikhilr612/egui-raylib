@@ -48,11 +48,12 @@ fn get_mouse_input(
     events: &mut Vec<Event>,
     pixels_per_point: f32,
     modifiers: Modifiers,
+    ctx: &egui::Context
 ) {
     let mouse_delta = rl.get_mouse_delta().scale_by(1.0 / pixels_per_point);
     let mouse_position = rl.get_mouse_position().scale_by(1.0 / pixels_per_point);
 
-    if mouse_delta.x > 0.0 || mouse_delta.y > 0.0 {
+    if mouse_delta.x > 0.0 || mouse_delta.y > 0.0 || ctx.wants_pointer_input() {
         events.push(Event::MouseMoved(Vec2::new(mouse_delta.x, mouse_delta.y)));
         events.push(Event::PointerMoved(Pos2::new(
             mouse_position.x,
@@ -207,9 +208,7 @@ pub fn gather_input(opt: &InputOptions, ctx: &egui::Context, rl: &mut RaylibHand
 		}
     }
 
-    // if ctx.wants_pointer_input() {
-    get_mouse_input(rl, &mut events, pixels_per_point, modifiers);
-    // }
+    get_mouse_input(rl, &mut events, pixels_per_point, modifiers, ctx);
 
     let dropped_files = if rl.is_file_dropped() {
         rl.load_dropped_files()

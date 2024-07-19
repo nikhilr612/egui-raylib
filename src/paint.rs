@@ -6,7 +6,7 @@ use egui::{
     ahash::HashMap, epaint::ImageDelta, output::OutputEvent, Context, FullOutput, OpenUrl,
     RawInput, TextureId,
 };
-use egui::{Mesh, Vec2};
+use egui::{Mesh, Rounding, Vec2};
 use raylib::color::Color;
 use raylib::drawing::RaylibScissorModeExt;
 use raylib::ffi::Rectangle;
@@ -288,24 +288,32 @@ impl Painter {
                 };
                 let fill_color = rs.fill.convert();
                 let stroke_color = rs.stroke.color.convert();
-                d.draw_rectangle_rec(rrect2, stroke_color);
 
-                if rs.uv == egui::Rect::ZERO {
-                    // No texture here.
-                    d.draw_rectangle_rec(rrect, fill_color);
-                } else {
-                    // Draw textured rectangle.
-                    if let Some(texture) = self.textures.get(&rs.fill_texture_id) {
-                        let source_rec = Rectangle {
-                            x: rs.uv.min.x * texture.width as f32,
-                            y: rs.uv.max.y * texture.height as f32,
-                            width: rs.uv.width(),
-                            height: rs.uv.height()
-                        };
-                        d.draw_texture_pro(texture, source_rec, rrect, Vector2::zero(), 0.0, fill_color)
+                if rs.rounding == Rounding::ZERO {
+                    d.draw_rectangle_rec(rrect2, stroke_color);
+                    if rs.uv == egui::Rect::ZERO {
+                        // No texture here.
+                        d.draw_rectangle_rec(rrect, fill_color);
                     } else {
-                        d.draw_rectangle_rec(rrect, fill_color)
+                        // Draw textured rectangle.
+                        if let Some(texture) = self.textures.get(&rs.fill_texture_id) {
+                            let source_rec = Rectangle {
+                                x: rs.uv.min.x * texture.width as f32,
+                                y: rs.uv.max.y * texture.height as f32,
+                                width: rs.uv.width(),
+                                height: rs.uv.height()
+                            };
+                            d.draw_texture_pro(texture, source_rec, rrect, Vector2::zero(), 0.0, fill_color)
+                        } else {
+                            d.draw_rectangle_rec(rrect, fill_color)
+                        }
                     }
+                } else {
+                    // Can't draw textures on rounded rectangles.
+                    // Raylib roundedness is the ratio between the radius and the smallest dimension.
+                    let roundness = rs.rounding.ne.max(rs.rounding.nw).max(rs.rounding.se).max(rs.rounding.sw) * pxpp / rrect.width.min(rrect.height);
+                    d.draw_rectangle_rounded(rrect2, roundness, 4, stroke_color);
+                    d.draw_rectangle_rounded(rrect, roundness, 4, fill_color);
                 }
             },
 

@@ -44,7 +44,7 @@ fn main() {
 ```
 ## Screenshot
 
-The screenshot of another example.
+The screenshot of another example, showcasing various widgets.
 
 ![Screenshot of an example program](screenshot.png)
 

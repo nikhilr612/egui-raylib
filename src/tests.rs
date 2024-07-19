@@ -1,4 +1,4 @@
-use egui::{Color32, Context, Label, RichText, Visuals};
+use egui::{Color32, Context, Label, RichText, Rounding, Visuals};
 use raylib::prelude::{Color, RaylibDraw};
 
 use crate::{input::InputOptions, RlEgui};
@@ -209,11 +209,12 @@ fn it_works() {
     ctx.set_visuals(Visuals {
         override_text_color: Some(Color32::WHITE),
         hyperlink_color: Color32::BLUE,
+        window_rounding: Rounding::ZERO,
         ..Visuals::dark()
     });
 
     let inopt = InputOptions {
-        native_pixels_per_point: 1.25,
+        native_pixels_per_point: 1.3,
         ..Default::default()
     };
 
