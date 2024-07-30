@@ -48,7 +48,7 @@ fn get_mouse_input(
     events: &mut Vec<Event>,
     pixels_per_point: f32,
     modifiers: Modifiers,
-    ctx: &egui::Context
+    ctx: &egui::Context,
 ) {
     let mouse_delta = rl.get_mouse_delta().scale_by(1.0 / pixels_per_point);
     let mouse_position = rl.get_mouse_position().scale_by(1.0 / pixels_per_point);
@@ -233,10 +233,6 @@ pub fn gather_input(opt: &InputOptions, ctx: &egui::Context, rl: &mut RaylibHand
     } else {
         Vec::new()
     };
-
-    if !events.is_empty() {
-        println!("Events: {events:?}");
-    }
 
     RawInput {
         viewport_id: ViewportId::ROOT,

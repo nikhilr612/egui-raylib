@@ -206,10 +206,32 @@ fn it_works() {
     let (mut rl, thread) = raylib::init().size(768, 1024).title("Hello, World").build();
     let ctx = Context::default();
 
+    let mut fonts = egui::FontDefinitions::default();
+
+    fonts.font_data.insert("retro".to_owned(), egui::FontData::from_static(include_bytes!("../../alagard.ttf")));
+
+    // Put my font first (highest priority) for proportional text:
+    fonts
+        .families
+        .entry(egui::FontFamily::Proportional)
+        .or_default()
+        .insert(0, "retro".to_owned());
+
+    // Put my font as last fallback for monospace:
+    fonts
+        .families
+        .entry(egui::FontFamily::Monospace)
+        .or_default()
+        .push("retro".to_owned());
+
+    // Tell egui to use these fonts:
+    ctx.set_fonts(fonts);
+
     ctx.set_visuals(Visuals {
         override_text_color: Some(Color32::WHITE),
         hyperlink_color: Color32::BLUE,
         window_rounding: Rounding::ZERO,
+        faint_bg_color: Color32::LIGHT_YELLOW.gamma_multiply(0.4),
         ..Visuals::dark()
     });
 

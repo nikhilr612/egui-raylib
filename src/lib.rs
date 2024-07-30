@@ -43,6 +43,9 @@ use raylib::{
     RaylibHandle, RaylibThread,
 };
 
+/// Re-export egui crate for convenience.
+pub use egui;
+
 pub mod input;
 pub mod paint;
 pub mod util;

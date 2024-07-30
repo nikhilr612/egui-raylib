@@ -258,10 +258,7 @@ impl Painter {
                 } else {
                     let lines = ps.points.iter()
                         .zip(ps.points.iter().skip(1))
-                        .map(|(a,b)| 
-                            (a.convert().scale_by(pxpp), 
-                             b.convert().scale_by(pxpp))
-                            );
+                        .map(|(a,b)| (a.convert().scale_by(pxpp), b.convert().scale_by(pxpp)));
                     let thick = ps.stroke.width * pxpp;
                     let color = color_mode_to_color(&ps.stroke.color);
 
